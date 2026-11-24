@@ -1,7 +1,7 @@
 /*********************************************************************
 File    : main.c
 Program : Index-11
-Purpose : TIM6-triggered ADC interrupt sampling and serial averages
+Purpose : ADC averaging and periodic USART2 DMA profiling
 *********************************************************************/
 
 #include <stdio.h>
@@ -13,6 +13,9 @@ Purpose : TIM6-triggered ADC interrupt sampling and serial averages
 static void TERM_TxStringXY(USART_TypeDef *uart, unsigned row, unsigned column,
                             const char *message);
 
+static const char periodicMessage[] = "Hello CMPE2250\r\n";
+static volatile uint32_t milliseconds;
+static volatile int dmaBusy;
 static volatile uint32_t totals[2];
 static volatile uint32_t completedTotals[2];
 static volatile unsigned completedBlocks;
@@ -22,24 +25,9 @@ static volatile unsigned completedBlocks;
 *********************************************************************/
 int main(void)
 {
-//   Configure SysTick to trigger an interrupt every 1 ms.
-// Every 250 ms, transmit the fixed string "Hello CMPE2250\r\n" (16 bytes) via USART2 using DMA (DMA1_Channel2).
-// GPIO Profiling on PA6:
-// Drive PA6 HIGH immediately before triggering the DMA transmission.
-// Enable the DMA Transfer Complete Interrupt (TCIE) on DMA1_Channel2.
-// Clear the interrupt flag in DMA1->IFCR and drive PA6 LOW inside DMA1_Channel2_3_IRQHandler().
-// Connect the oscilloscope:
-// Channel 1 (Yellow): Pin PA6 (Profiling Pin)
-// Channel 2 (Blue): Pin PA2 (USART2_TX)
-// In your report, address the following theoretical questions:
-// What does the pulse period of PA6 represent?
-// What does the pulse width (HIGH time) of PA6 represent?
-// At 115,200 baud (1 start bit, 8 data bits, 1 stop bit = 10 bits per frame): 
- 
- 
-
     char message[72];
     unsigned lastBlock = 0;
+    uint32_t lastTransmit = 0;
 
     __disable_irq();
     Clock_InitPll(PLL_50MHZ);
@@ -47,13 +35,24 @@ int main(void)
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
     RCC->APBENR1 |= RCC_APBENR1_TIM6EN | RCC_APBENR1_USART2EN;
     RCC->APBENR2 |= RCC_APBENR2_ADCEN;
-    (void)RCC->APBENR2;
+    RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+    (void)RCC->AHBENR;
 
     GPIOA->MODER |= GPIO_MODER_MODE0 | GPIO_MODER_MODE1; // ADC_IN0 / ADC_IN1.
     GPIO_SetPullMode(GPIOA, 0, PullMode_None);
     GPIO_SetPullMode(GPIOA, 1, PullMode_None);
     GPIO_InitAlternateF(GPIOA, 2, 1); // USART2 TX to the virtual COM port.
     UART_Init(USART2, 115200, 0);
+
+    GPIO_Clear(GPIOA, 6);
+    GPIO_InitOutput(GPIOA, 6);
+    DMAMUX1_Channel1->CCR = 53; // USART2_TX request to DMA1 channel 2.
+    DMA1_Channel2->CPAR = (uint32_t)(uintptr_t)&USART2->TDR;
+    DMA1_Channel2->CMAR = (uint32_t)(uintptr_t)periodicMessage;
+    DMA1_Channel2->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE;
+    DMA1->IFCR = DMA_IFCR_CGIF2;
+    USART2->CR3 |= USART_CR3_DMAT;
+    NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 
     ADC1->CFGR2 = ADC_CFGR2_CKMODE_1; // PCLK / 4 = 12.5 MHz.
     ADC1->CR |= ADC_CR_ADVREGEN;
@@ -88,11 +87,32 @@ int main(void)
     Timer_Init(TIM6, 50, 1000); // 1 us ticks, 1 ms between updates.
     TIM6->CR2 = 2UL << TIM_CR2_MMS_Pos; // Update event drives TRGO.
     ADC1->CR |= ADC_CR_ADSTART;
+    SysTick_Config(SystemCoreClock / 1000);
     __enable_irq();
     Timer_SetEnable(TIM6, 1);
 
     while (1)
     {
+        uint32_t elapsed = milliseconds - lastTransmit;
+        if (dmaBusy || !(USART2->ISR & USART_ISR_TC))
+        {
+            continue;
+        }
+        if (elapsed >= 250)
+        {
+            lastTransmit += 250;
+            dmaBusy = 1;
+            DMA1_Channel2->CNDTR = sizeof periodicMessage - 1;
+            GPIO_Set(GPIOA, 6);
+            DMA1_Channel2->CCR |= DMA_CCR_EN;
+            continue;
+        }
+
+        // Leave time for terminal text before the next DMA slot.
+        if (elapsed >= 240 || completedBlocks == lastBlock)
+        {
+            continue;
+        }
         __disable_irq();
         unsigned block = completedBlocks;
         uint32_t sum0 = completedTotals[0];
@@ -154,5 +174,27 @@ void ADC1_COMP_IRQHandler(void)
             totals[1] = 0;
             sequences = 0;
         }
+    }
+}
+
+void SysTick_Handler(void)
+{
+    ++milliseconds;
+}
+
+/*
+ * Scope PA6 and PA2 together. PA6 repeats every 250 ms. Its high time
+ * ends when DMA writes the final byte to TDR and the ISR clears PA6.
+ * PA2 shifts 16 frames of 10 bits at 115200 baud, about 1.389 ms.
+ * The final byte can still be queued or shifting when PA6 goes low.
+ */
+void DMA1_Channel2_3_IRQHandler(void)
+{
+    if (DMA1->ISR & DMA_ISR_TCIF2)
+    {
+        DMA1->IFCR = DMA_IFCR_CTCIF2;
+        DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+        GPIO_Clear(GPIOA, 6);
+        dmaBusy = 0;
     }
 }
