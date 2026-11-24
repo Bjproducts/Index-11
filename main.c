@@ -22,6 +22,22 @@ static volatile unsigned completedBlocks;
 *********************************************************************/
 int main(void)
 {
+//   Configure SysTick to trigger an interrupt every 1 ms.
+// Every 250 ms, transmit the fixed string "Hello CMPE2250\r\n" (16 bytes) via USART2 using DMA (DMA1_Channel2).
+// GPIO Profiling on PA6:
+// Drive PA6 HIGH immediately before triggering the DMA transmission.
+// Enable the DMA Transfer Complete Interrupt (TCIE) on DMA1_Channel2.
+// Clear the interrupt flag in DMA1->IFCR and drive PA6 LOW inside DMA1_Channel2_3_IRQHandler().
+// Connect the oscilloscope:
+// Channel 1 (Yellow): Pin PA6 (Profiling Pin)
+// Channel 2 (Blue): Pin PA2 (USART2_TX)
+// In your report, address the following theoretical questions:
+// What does the pulse period of PA6 represent?
+// What does the pulse width (HIGH time) of PA6 represent?
+// At 115,200 baud (1 start bit, 8 data bits, 1 stop bit = 10 bits per frame): 
+ 
+ 
+
     char message[72];
     unsigned lastBlock = 0;
 
