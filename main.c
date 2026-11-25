@@ -17,7 +17,17 @@ int main(void)
         //config usart 2 to recieve incoming bytes using recievncver timeout()RTO TO 1MS TRIGERRING HE RTO INTERUPT TO DETECT THE OEND OF A TRA 
         //THE DEKTOP APPLICAION DOESNT NOT APPEND A TERMINATION CHARATER 
         //USING DMA FOR RECEPTION IS RECOMMNED YOU MAY TRACK NUMBER OF RECIEVED BYTES USING dma ORrXNE INTERUPTS [ROVIIDED THE RTO ISR IS USED O SIGNAL PACKET COMPLETION 
-        //ONCE THE RECEPTION HAS TIMED OUT RANSMIT THE TOTAL BYTE COUNT BACK THE APPLIVATION OVER USART 2 USING THE EXACT FORMAT 
+        //ONCE THE RECEPTION HAS TIMED OUT RANSMIT THE TOTAL BYTE COUNT BACK THE APPLIVATION OVER USART 2 USING THE EXACT FORMAT (BYTES RECIEIVED :10)
+
+
+        //CONFIG ADC1 WITH A CLOCK PRESCALLER OF 1- SO THE ADC RUNS AT 5MHZ 
+        //CONFIG A CONVERSION SEQUENCE TO SAMPLE AN4(PA4) AND AN9(PB1).
+        //TRIGGER THE CONVERSION SEQUNCE EVERY 100US USING A HARDWARE IMERS UPDATE EVENT AS AN EXTERNAL TRIGGER SOURCE (TRGO)
+        //tming verifcaions pins 
+        //drive pa6 high when the conversion seqeince os triggered amd LOW wjen nd of sequence interupt occurs tp measure the sequemce conversion time 
+        //toggle pa5 everytime a new set of avergages is calculated and printed to verify the update period
+        //collct and average 500 samples per channel , convert averages to volatage and print the results to the debig termina formatted to 2 decimal place one chanel per line 
+        //if  configured properly the debug termnals values and Pa6 will update every 50ms 
     }
 }
 
