@@ -28,6 +28,9 @@ int main(void)
         //toggle pa5 everytime a new set of avergages is calculated and printed to verify the update period
         //collct and average 500 samples per channel , convert averages to volatage and print the results to the debig termina formatted to 2 decimal place one chanel per line 
         //if  configured properly the debug termnals values and Pa6 will update every 50ms 
+
+        //the micro will transmit raw binary data rather than ASCII text , standard serial text terminals will not siplay values properly 
+        //keep  the debug termnail from q2 actie anf simi transmit 11 byte binary packet over usart2 containing the avergaed AN4 and An9 volatges at the the same 50ms update rate 
     }
 }
 
